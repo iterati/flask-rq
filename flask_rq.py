@@ -69,8 +69,8 @@ def get_worker(*queues):
     servers = [get_server_url(name) for name in queues]
     if not servers.count(servers[0]) == len(servers):
         raise Exception('A worker only accept one connection')
-    return Worker([get_queue(name) for name in queues],
-        connection=get_connection(queues[0]))
+    return FlaskRQWorker([get_queue(name) for name in queues],
+                         connection=get_connection(queues[0]))
 
 
 def job(func_or_queue=None):
@@ -103,3 +103,10 @@ class RQ(object):
     def init_app(self, app):
         for key, value in default_config.items():
             app.config.setdefault(key, value)
+
+
+class FlaskRQWorker(Worker):
+
+    def perform_job(self, *args, **kwargs):
+        with current_app.app_context():
+            super(FlaskRQWorker, self).perform_job(*args, **kwargs)
