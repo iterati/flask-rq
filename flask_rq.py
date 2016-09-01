@@ -27,6 +27,7 @@ default_config = {
 }
 
 
+
 def config_value(name, key):
     name = name.upper()
     config_key = 'RQ_%s_%s' % (name, key)
@@ -41,9 +42,9 @@ def get_connection(queue='default'):
     if url:
         return redis.from_url(url, db=config_value(queue, 'DB'))
     return redis.Redis(host=config_value(queue, 'HOST'),
-        port=config_value(queue, 'PORT'),
-        password=config_value(queue, 'PASSWORD'),
-        db=config_value(queue, 'DB'))
+                       port=config_value(queue, 'PORT'),
+                       password=config_value(queue, 'PASSWORD'),
+                       db=config_value(queue, 'DB'))
 
 
 def get_queue(name='default', **kwargs):
@@ -69,8 +70,7 @@ def get_worker(*queues):
     servers = [get_server_url(name) for name in queues]
     if not servers.count(servers[0]) == len(servers):
         raise Exception('A worker only accept one connection')
-    return FlaskRQWorker([get_queue(name) for name in queues],
-                         connection=get_connection(queues[0]))
+    return WorkerCls([get_queue(name) for name in queues], connection=get_connection(queues[0]))
 
 
 def job(func_or_queue=None):
@@ -95,18 +95,33 @@ def job(func_or_queue=None):
     return wrapper
 
 
+class FlaskRQWorker(Worker):
+    def perform_job(self, *args, **kwargs):
+        with current_app.app_context():
+            super(FlaskRQWorker, self).perform_job(*args, **kwargs)
+
+
 class RQ(object):
-    def __init__(self, app=None):
+    def __init__(self, app=None, worker_cls=None):
         if app is not None:
             self.init_app(app)
+
+        self.set_worker_cls(worker_cls)
 
     def init_app(self, app):
         for key, value in default_config.items():
             app.config.setdefault(key, value)
 
+    def set_worker_cls(self, worker_cls):
+        set_worker_cls(worker_cls)
 
-class FlaskRQWorker(Worker):
 
-    def perform_job(self, *args, **kwargs):
-        with current_app.app_context():
-            super(FlaskRQWorker, self).perform_job(*args, **kwargs)
+WorkerCls = FlaskRQWorker
+
+
+def set_worker_cls(worker_cls=None):
+    if worker_cls is None:
+        worker_cls = FlaskRQWorker
+
+    global WorkerCls
+    WorkerCls = worker_cls
